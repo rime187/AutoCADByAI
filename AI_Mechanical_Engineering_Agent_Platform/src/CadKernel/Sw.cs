@@ -263,10 +263,11 @@ namespace CadKernel
         public static T Guard<T>(string what, int seconds, Func<T> call)
         {
             var proc = swProc;
-            int fired = 0;
-            using (new System.Threading.Timer(_ =>
+            const int running = 0, timedOut = 1, completed = 2;
+            int state = running;
+            var timer = new System.Threading.Timer(_ =>
             {
-                if (System.Threading.Interlocked.Exchange(ref fired, 1) != 0) return;
+                if (System.Threading.Interlocked.CompareExchange(ref state, timedOut, running) != running) return;
                 try
                 {
                     if (proc != null && IsOwned(proc))
@@ -278,20 +279,27 @@ namespace CadKernel
                     }
                 }
                 catch { }
-            }, null, seconds * 1000, System.Threading.Timeout.Infinite))
+            }, null, seconds * 1000, System.Threading.Timeout.Infinite);
+            try
             {
+                T result;
                 try
                 {
-                    T result = call();
-                    if (System.Threading.Volatile.Read(ref fired) == 1) throw new SwHungException(what, seconds, null);
-                    return result;
+                    result = call();
                 }
-                catch (Exception e)
+                finally
                 {
-                    RuntimeEvents.Record(what, "failed", error: e);
-                    if (System.Threading.Volatile.Read(ref fired) == 1 && e is not SwHungException) throw new SwHungException(what, seconds, e);
-                    throw;
+                    System.Threading.Interlocked.CompareExchange(ref state, completed, running);
+                    timer.DisposeAsync().AsTask().GetAwaiter().GetResult();
                 }
+                if (state == timedOut) throw new SwHungException(what, seconds, null);
+                return result;
+            }
+            catch (Exception e)
+            {
+                RuntimeEvents.Record(what, "failed", error: e);
+                if (state == timedOut && e is not SwHungException) throw new SwHungException(what, seconds, e);
+                throw;
             }
         }
 

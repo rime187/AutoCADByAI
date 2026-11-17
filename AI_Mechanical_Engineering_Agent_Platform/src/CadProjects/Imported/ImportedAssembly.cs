@@ -219,8 +219,13 @@ namespace CadProjects.Imported
             foreach (Component2 c in (object[])((AssemblyDoc)am).GetComponents(false) ?? new object[0])
             {
                 string cp = c.GetPathName(), id;
-                if (string.IsNullOrEmpty(cp) || !byPath.TryGetValue(Path.GetFullPath(cp), out id)) continue;
+                if (cp != null && cp.EndsWith(".SLDASM", StringComparison.OrdinalIgnoreCase)) continue;
                 total++;
+                if (string.IsNullOrEmpty(cp) || !byPath.TryGetValue(Path.GetFullPath(cp), out id))
+                {
+                    miss.Add("未登记零件实例 " + c.Name2 + ": " + (string.IsNullOrEmpty(cp) ? "缺少文件路径" : cp));
+                    continue;
+                }
                 var w = Xf.FromArray((double[])((MathTransform)c.GetTotalTransform(false)).ArrayData);
                 List<Xf> list;
                 if (!remain.TryGetValue(id, out list) || list.Count == 0) { miss.Add(id + " 多出实例 " + c.Name2); continue; }

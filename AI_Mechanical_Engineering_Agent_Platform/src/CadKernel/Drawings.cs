@@ -239,6 +239,14 @@ namespace CadKernel
             finally { Sw.App.CloseDoc(d.GetTitle()); }
         }
 
+        static void SaveAndPdf(ModelDoc2 drawing, string path)
+        {
+            Sw.Save(drawing, path);
+            var saved = (ModelDoc2)Sw.App.GetOpenDocumentByName(path);
+            if (saved != null) Sw.Close(saved);
+            Pdf(path);
+        }
+
         static void SaveExport(ModelDoc2 d, string path)
         {
             int errors = 0, warnings = 0;
@@ -355,7 +363,9 @@ namespace CadKernel
                 if (File.Exists(alt)) ok = dd.SetupSheet5(sh.GetName(), (int)p[0], (int)p[1], s1n, s2n, true, alt, p[5], p[6], "默认", false);
             }
             double[] q = (double[])sh.GetProperties2();
-            if (Math.Abs(q[3] / q[2] - n) > 1e-6) Sw.Log(string.Format("   ! 图纸比例未生效 {0} (SetupSheet5={1})", ScaleText(q[3] / q[2]), ok));
+            double actual = q[3] / q[2];
+            if (!double.IsFinite(actual) || Math.Abs(actual - n) > 1e-6)
+                throw new IOException(string.Format("图纸比例未生效: 实际 {0}, 期望 {1} (SetupSheet5={2})", ScaleText(actual), ScaleText(n), ok));
         }
 
         static DrawingDoc NewDrawing(string size, out ModelDoc2 d)
@@ -966,9 +976,7 @@ namespace CadKernel
             string dir = Path.Combine(DrwRoot, RelDir(path));
             Directory.CreateDirectory(dir);
             string f = Path.Combine(dir, Path.GetFileNameWithoutExtension(path) + ".SLDDRW");
-            Sw.Save(d, f);
-            try { SaveExport(d, Path.ChangeExtension(f, ".pdf")); }
-            finally { Sw.App.CloseDoc(d.GetTitle()); }
+            SaveAndPdf(d, f);
             Index.Add(new[] { code, name, "A3", ScaleText(scale), Path.Combine(RelDir(path), Path.GetFileName(f)), nd + nh > 0 ? "" : NeedsDims,
                               nd.ToString(), nh.ToString(), "", marks.Count == 0 ? "[]" : "", markCol });
             Sw.Log(string.Format("{0,-16} {1,-22} A3 {2,-6} 尺寸 {3,3}  孔 {4,3}", code, name, ScaleText(scale), nd, nh));
@@ -1362,14 +1370,15 @@ namespace CadKernel
                     if (a > ba) { ba = a; best = f; }
                 }
             }
-            if (best == null) { Sw.Log("   DXF: 无合适平面"); return; }
+            if (best == null) throw new IOException("DXF 无合适平面: " + path);
             m.ClearSelection2(true);
             ((Entity)best).Select4(false, null);
             string dir = Path.Combine(DxfRoot, RelDir(path));
             Directory.CreateDirectory(dir);
             string f2 = Path.Combine(dir, Path.GetFileNameWithoutExtension(path) + ".dxf");
             bool ok = ((PartDoc)m).ExportToDWG2(f2, path, (int)swExportToDWG_e.swExportToDWG_ExportSelectedFacesOrLoops, true, null, false, false, 0, null);
-            if (!ok) Sw.Log("   DXF 导出失败"); else nDxf++;
+            if (!ok) throw new IOException("DXF 导出失败: " + f2);
+            nDxf++;
         }
 
         // =====================================================================================
@@ -1704,9 +1713,7 @@ namespace CadKernel
             string dir = Path.Combine(DrwRoot, "装配图");
             Directory.CreateDirectory(dir);
             string f = Path.Combine(dir, code + ".SLDDRW");
-            Sw.Save(d, f);
-            Sw.App.CloseDoc(d.GetTitle());
-            Pdf(f);                          // 重新打开后导出: 大装配体视图后台生成, 新建后立即导出为空白
+            SaveAndPdf(d, f);                 // 重新打开后导出: 大装配体视图后台生成, 新建后立即导出为空白
             Sw.Log(string.Format("   技术要求、保存与导出 PDF {0:F0} s", stage.Elapsed.TotalSeconds));
             Sw.Close(am);
             Index.Add(new[] { no, nm, size.ToUpper(), "1:" + scale, "装配图\\" + Path.GetFileName(f), nd > 0 ? "" : NeedsDims, nd.ToString(), "", nb.ToString(),
@@ -1866,9 +1873,7 @@ namespace CadKernel
                 summary.Add(line);
                 // 每次都另存并重新打开导出 PDF: 保存后的图纸按存储位置画序号, PDF 就是最终交付的样子
                 string f = Path.Combine(outDir, string.Format("probe_{0:00}.SLDDRW", it));
-                Sw.Save(d, f);
-                Sw.App.CloseDoc(d.GetTitle());
-                Pdf(f);
+                SaveAndPdf(d, f);
                 Sw.Close(am);
             }
             Sw.Log("== 汇总 (" + Path.GetFileName(path) + " " + size.ToUpper() + " 1:" + scale + ")");
