@@ -90,7 +90,7 @@ namespace CadKernel
             string id = "GB70_M" + d + "x" + L;
             return Cat.Make(new Part {
                 Id = id, Dir = D, Kind = Kind.Std, Code = "GB/T 70.1", Name = "内六角圆柱头螺钉 M" + d + "×" + L,
-                Spec = "M" + d + "×" + L + " 12.9 级 发黑", Mat = Mat.ST_88, Color = Col.Black },
+                Spec = "M" + d + "×" + L + " 12.9 级 发黑", Mat = Mat.ST_129, Color = Col.Black },
                 m => {
                     Sk.XY(m, -t[1]).Circ(0, 0, t[0]).Ext(t[1], 1);
                     Sk.XY(m, 0).Circ(0, 0, d).Ext(L, 1);

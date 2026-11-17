@@ -221,9 +221,8 @@ namespace CadKernel
             {
                 ModelDoc2 d;
                 NewDrawing(size, out d);
-                int e1 = 0, w1 = 0;
-                d.Extension.SaveAs(Path.Combine(dir, "format_" + size.ToUpper() + ".pdf"), 0, (int)swSaveAsOptions_e.swSaveAsOptions_Silent, null, ref e1, ref w1);
-                Sw.App.CloseDoc(d.GetTitle());
+                try { SaveExport(d, Path.Combine(dir, "format_" + size.ToUpper() + ".pdf")); }
+                finally { Sw.App.CloseDoc(d.GetTitle()); }
             }
         }
 
@@ -231,11 +230,21 @@ namespace CadKernel
         public static void Pdf(string drwPath, string ext = ".pdf")
         {
             ModelDoc2 d = Sw.Open(drwPath);
-            d.ForceRebuild3(false);
-            int e1 = 0, w1 = 0;
-            bool ok = d.Extension.SaveAs(Path.ChangeExtension(drwPath, ext), 0, (int)swSaveAsOptions_e.swSaveAsOptions_Silent, null, ref e1, ref w1);
-            Sw.Log(ext.ToUpper() + (ok ? " OK " : " 失败 ") + Path.GetFileName(drwPath) + " err=" + e1 + " warn=" + w1);
-            Sw.App.CloseDoc(d.GetTitle());
+            try
+            {
+                d.ForceRebuild3(false);
+                SaveExport(d, Path.ChangeExtension(drwPath, ext));
+                Sw.Log(ext.ToUpper() + " OK " + Path.GetFileName(drwPath));
+            }
+            finally { Sw.App.CloseDoc(d.GetTitle()); }
+        }
+
+        static void SaveExport(ModelDoc2 d, string path)
+        {
+            int errors = 0, warnings = 0;
+            bool ok = d.Extension.SaveAs(path, 0, (int)swSaveAsOptions_e.swSaveAsOptions_Silent, null, ref errors, ref warnings);
+            if (!ok || errors != 0)
+                throw new IOException("工程图导出失败 err=" + errors + " warn=" + warnings + ": " + path);
         }
 
         /// <summary>
@@ -958,9 +967,8 @@ namespace CadKernel
             Directory.CreateDirectory(dir);
             string f = Path.Combine(dir, Path.GetFileNameWithoutExtension(path) + ".SLDDRW");
             Sw.Save(d, f);
-            int e1 = 0, w1 = 0;
-            d.Extension.SaveAs(Path.ChangeExtension(f, ".pdf"), 0, (int)swSaveAsOptions_e.swSaveAsOptions_Silent, null, ref e1, ref w1);
-            Sw.App.CloseDoc(d.GetTitle());
+            try { SaveExport(d, Path.ChangeExtension(f, ".pdf")); }
+            finally { Sw.App.CloseDoc(d.GetTitle()); }
             Index.Add(new[] { code, name, "A3", ScaleText(scale), Path.Combine(RelDir(path), Path.GetFileName(f)), nd + nh > 0 ? "" : NeedsDims,
                               nd.ToString(), nh.ToString(), "", marks.Count == 0 ? "[]" : "", markCol });
             Sw.Log(string.Format("{0,-16} {1,-22} A3 {2,-6} 尺寸 {3,3}  孔 {4,3}", code, name, ScaleText(scale), nd, nh));

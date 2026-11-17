@@ -30,6 +30,7 @@ namespace CadKernel
         public static readonly Mat STEEL = new Mat("钢 (外购)", "普通碳钢", 7850);
         public static readonly Mat ST_A2 = new Mat("A2-70 不锈钢", "AISI 304", 7930);
         public static readonly Mat ST_88 = new Mat("8.8 级 发黑", "合金钢", 7850);
+        public static readonly Mat ST_129 = new Mat("12.9 级 发黑", "合金钢", 7850);
         public static readonly Mat PLASTIC = new Mat("工程塑料", "PP 共聚物", 1100);
         // 齿轮/轴类 (SOLIDWORKS 材料库名称已在本机核对)
         public static readonly Mat S4340 = new Mat("40CrNiMoA (AISI 4340, 正火)", "AISI 4340 钢，正火", 7850);

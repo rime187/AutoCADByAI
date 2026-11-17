@@ -310,29 +310,37 @@ namespace CadCli
                         finally { Sw.Disconnect(); }
                     }
                     case "clean":
-                        Sw.Connect(); Sw.CloseAll(); Sw.Disconnect();
+                        try { Sw.Connect(); Sw.CloseAll(); }
+                        finally { Sw.Disconnect(); }
                         Console.WriteLine("已关闭专用实例中 output/ 下的文档");
                         return 0;
                     case "diag":
                     {
                         if (args.Length < 2) return Usage();
-                        Sw.Connect();
-                        var m = Sw.Open(Path.GetFullPath(args[1]));
-                        for (var f = (SolidWorks.Interop.sldworks.Feature)m.FirstFeature(); f != null; f = (SolidWorks.Interop.sldworks.Feature)f.GetNextFeature())
-                            Console.WriteLine(string.Format("  {0,-22} {1}{2}", f.GetTypeName2(), f.Name,
-                                ((bool[])f.IsSuppressed2((int)SolidWorks.Interop.swconst.swInConfigurationOpts_e.swThisConfiguration, null))[0] ? "  (压缩)" : ""));
-                        if (m.GetType() == (int)SolidWorks.Interop.swconst.swDocumentTypes_e.swDocPART)
-                            Console.WriteLine("  包围盒 " + Sw.BoxStr(Sw.PartBox(m)) + "  体积 " + Sw.Volume(m).ToString("F0") + " mm³  质量 " + Sw.GetProp(m, "质量"));
-                        Sw.Close(m); Sw.Disconnect();
-                        return 0;
+                        try
+                        {
+                            Sw.Connect();
+                            var m = Sw.Open(Path.GetFullPath(args[1]));
+                            for (var f = (SolidWorks.Interop.sldworks.Feature)m.FirstFeature(); f != null; f = (SolidWorks.Interop.sldworks.Feature)f.GetNextFeature())
+                                Console.WriteLine(string.Format("  {0,-22} {1}{2}", f.GetTypeName2(), f.Name,
+                                    ((bool[])f.IsSuppressed2((int)SolidWorks.Interop.swconst.swInConfigurationOpts_e.swThisConfiguration, null))[0] ? "  (压缩)" : ""));
+                            if (m.GetType() == (int)SolidWorks.Interop.swconst.swDocumentTypes_e.swDocPART)
+                                Console.WriteLine("  包围盒 " + Sw.BoxStr(Sw.PartBox(m)) + "  体积 " + Sw.Volume(m).ToString("F0") + " mm³  质量 " + Sw.GetProp(m, "质量"));
+                            Sw.Close(m);
+                            return 0;
+                        }
+                        finally { Sw.Disconnect(); }
                     }
                     case "dump":
                     {
                         if (args.Length < 2) return Usage();
-                        Sw.Connect();
-                        Drw.Dump(Path.GetFullPath(args[1]), args.Length > 2 ? int.Parse(args[2]) : 1, args.Length > 3 ? int.Parse(args[3]) : 12);
-                        Sw.Disconnect();
-                        return 0;
+                        try
+                        {
+                            Sw.Connect();
+                            Drw.Dump(Path.GetFullPath(args[1]), args.Length > 2 ? int.Parse(args[2]) : 1, args.Length > 3 ? int.Parse(args[3]) : 12);
+                            return 0;
+                        }
+                        finally { Sw.Disconnect(); }
                     }
                     case "probe-asm":
                     {
@@ -537,7 +545,7 @@ namespace CadCli
         /// 由一次运行生成回归基准。只接受全部步骤完成、除"回归基准"外全部校核通过的运行;
         /// 已有基准时先列出新旧差异, 便于在提交说明里写明这次结果为什么变了。
         /// </summary>
-        static int MakeBaseline(string root, string runDir)
+        internal static int MakeBaseline(string root, string runDir)
         {
             string mf = Path.Combine(runDir, "run.json");
             if (!File.Exists(mf)) throw new FileNotFoundException("不是运行目录 (缺 run.json): " + runDir);
@@ -553,7 +561,10 @@ namespace CadCli
             string inputDir = Path.Combine(root, "input", m.Task);
             if (!File.Exists(Path.Combine(inputDir, "design.json"))) throw new DirectoryNotFoundException("找不到输入任务 input/" + m.Task);
             string idx = Path.Combine(runDir, "drawings", "index.json");
-            string indexJson = File.Exists(idx) ? File.ReadAllText(idx) : null;
+            string indexJson = File.ReadAllText(idx);
+            var drawings = Baseline.ReadIndex(indexJson);
+            if (drawings.Count == 0 || drawings.Any(r => string.IsNullOrWhiteSpace(r.File) || string.IsNullOrWhiteSpace(r.Size) || string.IsNullOrWhiteSpace(r.Scale)))
+                throw new InvalidDataException("图纸索引为空或缺少文件名、图幅、比例, 不能生成基准: " + idx);
             string target = Path.Combine(inputDir, Baseline.FileName);
             if (File.Exists(target))
             {
@@ -564,7 +575,7 @@ namespace CadCli
             File.WriteAllText(target, Baseline.Generate(m, indexJson, Path.GetFileName(runDir)), new UTF8Encoding(false));
             Console.WriteLine("已写入 " + Path.GetRelativePath(root, target));
             // 外形尺寸读数逐张列出: 与 PDF 上标的尺寸核对后再提交
-            foreach (var r in Baseline.ReadIndex(indexJson).Where(r => r.Extents != null))
+            foreach (var r in drawings.Where(r => r.Extents != null))
                 Console.WriteLine("  外形尺寸 " + r.File + ": " + string.Join(" / ", r.Extents.Select(v => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))) + " mm");
             return 0;
         }
